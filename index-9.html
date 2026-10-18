@@ -1,0 +1,1100 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#231d18">
+<meta name="description" content="Pick Craft: solte a picareta, quebre blocos, faça combos e compre picaretas melhores.">
+<meta property="og:title" content="Pick Craft">
+<meta property="og:description" content="Jogo de celular em pixel art: a picareta cai do céu e quebra tudo.">
+<meta property="og:image" content="pick-craft.png">
+<link rel="icon" type="image/png" href="pick-craft.png">
+<link rel="apple-touch-icon" href="pick-craft.png">
+<title>Pick Craft</title>
+<style>
+*,*::before,*::after{box-sizing:border-box}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);background:#16120f}
+html,body{height:100%}
+body{margin:0;font:14px/1.4 system-ui,sans-serif}
+img{max-width:100%}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600;700&display=swap">
+<style>
+/* Layout: tela única em retrato — mundo de blocos ocupa tudo, barra de ação embaixo, HUD flutuando no céu. Visual único (pixel art), sem tema escuro/claro. */
+:root{
+  --ink:#16120f;
+  --panel:#231d18;
+  --text:#f4ecd6;
+  --muted:#b9ab8c;
+  --grass:#5f9f35;
+  --grass-hi:#8cc95a;
+  --grass-lo:#3b6a1f;
+  --font-ui:"Pixelify Sans", "Courier New", monospace;
+  color-scheme:dark;
+}
+html,body{height:100%}
+body{background:var(--ink);color:var(--text);font-family:var(--font-ui);overflow:hidden;
+  -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.game{height:100%;max-width:520px;margin:0 auto;display:flex;flex-direction:column;background:var(--panel)}
+.stage{position:relative;flex:1;min-height:0;overflow:hidden}
+canvas{display:block;width:100%;height:100%;image-rendering:pixelated;cursor:crosshair}
+.hud{position:absolute;top:10px;left:12px;right:12px;display:flex;flex-wrap:wrap;gap:6px;pointer-events:none}
+.chip{display:flex;align-items:center;gap:6px;padding:4px 8px;background:rgba(22,18,15,.72);
+  box-shadow:inset 0 0 0 2px rgba(0,0,0,.35);font-size:14px;line-height:1.2;font-variant-numeric:tabular-nums}
+.chip .lbl{color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-size:11px}
+.chip b{font-weight:700}
+.chip.combo{background:rgba(120,72,0,.85);color:#ffe27a}
+.chip.bump{animation:bump .28s ease-out}
+@keyframes bump{40%{transform:scale(1.18)}}
+.chip.gold{animation:gold .7s ease-out}
+@keyframes gold{30%{transform:scale(1.15);background:rgba(190,140,20,.95)}}
+#drop.ready{animation:ready 1.1s ease-in-out infinite}
+@keyframes ready{50%{filter:brightness(1.18)}}
+@media (prefers-reduced-motion: reduce){.chip.bump,.chip.gold,#drop.ready{animation:none}}
+.sw{width:10px;height:10px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.5)}
+.bar{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:stretch;
+  padding-block:12px 14px;padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));
+  background:var(--panel);border-top:4px solid var(--ink)}
+.hint{grid-column:1 / -1;margin:0;color:var(--muted);font-size:13px;text-align:center}
+button{font-family:var(--font-ui);border:0;cursor:pointer;color:var(--text)}
+#drop{display:flex;align-items:center;justify-content:center;gap:10px;min-height:64px;padding:8px 14px;
+  font-size:20px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;background:var(--grass);
+  text-shadow:2px 2px 0 var(--grass-lo);
+  box-shadow:inset 4px 4px 0 var(--grass-hi), inset -4px -4px 0 var(--grass-lo), 0 4px 0 var(--ink);
+  transition:transform .05s}
+#drop:active{transform:translateY(3px);box-shadow:inset 4px 4px 0 var(--grass-lo), inset -4px -4px 0 var(--grass-hi), 0 1px 0 var(--ink)}
+#drop:disabled{filter:saturate(.35) brightness(.75);cursor:default}
+#drop img{width:36px;height:36px;image-rendering:pixelated}
+.small{min-width:64px;padding:6px 10px;font-size:13px;background:#4a4039;
+  box-shadow:inset 3px 3px 0 #6a5d53, inset -3px -3px 0 #2c2520, 0 4px 0 var(--ink)}
+.small:active{transform:translateY(3px)}
+button:focus-visible{outline:3px solid #fff;outline-offset:2px}
+.menu{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;
+  padding:20px 16px;background:linear-gradient(rgba(10,8,6,.05), rgba(10,8,6,.55))}
+.logo{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center}
+.logo img{width:84px;height:84px;image-rendering:pixelated;animation:bob 2.6s ease-in-out infinite}
+@keyframes bob{0%,100%{transform:translateY(0) rotate(-8deg)}50%{transform:translateY(-8px) rotate(8deg)}}
+.logo h1{margin:0;display:flex;flex-direction:column;align-items:center;font-weight:700;text-transform:uppercase;line-height:.95;color:#fff6dc;
+  text-shadow:-3px 0 #1d140c,3px 0 #1d140c,0 -3px #1d140c,0 3px #1d140c,-3px -3px #1d140c,3px 3px #1d140c,-3px 3px #1d140c,3px -3px #1d140c,6px 7px 0 var(--grass-lo)}
+.logo h1 small{font-size:20px;letter-spacing:.12em}
+.logo h1 span{font-size:44px;letter-spacing:.02em}
+.logo p{margin:4px 0 0;font-size:15px;color:#ffe27a;text-shadow:2px 2px 0 #1d140c}
+.menu-stack{width:100%;max-width:290px;display:flex;flex-direction:column;gap:10px}
+.mtitle{margin:0 0 2px;text-align:center;font-size:22px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#fff6dc;text-shadow:2px 2px 0 #1d140c}
+.mbtn{width:100%;min-height:52px;padding:6px 12px;font-size:20px;font-weight:600;letter-spacing:.03em;color:#f4f4f4;background:#7b7b82;
+  text-shadow:2px 2px 0 #3a3a3e;box-shadow:inset 3px 3px 0 #a9a9b0, inset -3px -3px 0 #4f4f56, 0 0 0 3px #16120f}
+.mbtn:hover{background:#8a8aa0}
+.mbtn.go{background:var(--grass);text-shadow:2px 2px 0 var(--grass-lo);box-shadow:inset 3px 3px 0 var(--grass-hi), inset -3px -3px 0 var(--grass-lo), 0 0 0 3px #16120f;animation:ready 1.1s ease-in-out infinite}
+.mbtn:active{transform:translateY(2px);box-shadow:inset 3px 3px 0 #4f4f56, inset -3px -3px 0 #a9a9b0, 0 0 0 3px #16120f}
+.mcard{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:12px 14px;background:rgba(22,18,15,.88);box-shadow:inset 0 0 0 2px rgba(0,0,0,.4)}
+.mcard span{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.mcard b{font-size:20px;font-variant-numeric:tabular-nums;color:#ffe27a}
+.menu{overflow-y:auto}
+.menu.shop-open{justify-content:flex-start}
+.shop{max-width:340px}
+.shop-sec{margin:6px 0 0;font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#fff6dc;text-shadow:2px 2px 0 #1d140c}
+.srow{display:grid;grid-template-columns:36px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 10px;background:rgba(22,18,15,.9);box-shadow:inset 0 0 0 2px rgba(0,0,0,.4)}
+.srow img{width:36px;height:36px;image-rendering:pixelated}
+.srow p{margin:0;font-size:15px;font-weight:600;line-height:1.2;min-width:0}
+.srow small{display:block;font-size:12px;font-weight:400;color:var(--muted)}
+.sbtn{min-width:86px;min-height:38px;padding:4px 10px;font-size:14px;font-weight:600;color:#f4f4f4;background:#7b7b82;text-shadow:1px 1px 0 #3a3a3e;
+  box-shadow:inset 2px 2px 0 #a9a9b0, inset -2px -2px 0 #4f4f56, 0 0 0 2px #16120f}
+.sbtn:active{transform:translateY(2px)}
+.sbtn.buy{background:var(--grass);text-shadow:1px 1px 0 var(--grass-lo);box-shadow:inset 2px 2px 0 var(--grass-hi), inset -2px -2px 0 var(--grass-lo), 0 0 0 2px #16120f}
+.sbtn.off{background:#4a4542;color:#a99f92;box-shadow:inset 2px 2px 0 #5c5550, inset -2px -2px 0 #2c2826, 0 0 0 2px #16120f}
+.sbtn.using{background:#2c4a1c;color:#bfe59a;box-shadow:inset 0 0 0 2px #16120f}
+.coins{color:#ffd34d}
+.shop-msg{margin:0;min-height:18px;font-size:13px;text-align:center;color:#ffe27a;text-shadow:1px 1px 0 #1d140c}
+.mhelp{margin:0;padding:12px 14px 12px 32px;background:rgba(22,18,15,.88);box-shadow:inset 0 0 0 2px rgba(0,0,0,.4);font-size:14px;line-height:1.45;display:flex;flex-direction:column;gap:6px}
+.menu [hidden],.menu[hidden],[hidden]{display:none!important}
+.hud.off{visibility:hidden}
+@media (prefers-reduced-motion: reduce){.logo img,.mbtn.go{animation:none}}
+</style>
+
+<div class="game">
+  <div class="stage" id="stage">
+    <canvas id="c" aria-label="Mundo de blocos. Toque numa coluna para soltar uma picareta ali."></canvas>
+    <div class="hud off" aria-live="polite">
+      <div class="chip"><span class="lbl">Vida</span><b id="sLife">—</b></div>
+      <div class="chip"><span class="lbl">Moedas</span><b class="coins" id="sCoins">0</b></div>
+      <div class="chip"><span class="lbl">Blocos</span><b id="sBlocks">0</b></div>
+      <div class="chip"><span class="lbl">Fundo</span><b id="sDepth">0 m</b></div>
+      <div class="chip"><span class="lbl">Recorde</span><b id="sBest">0 m</b></div>
+      <div class="chip combo" id="comboChip" hidden><b id="sCombo">COMBO x2</b></div>
+      <div class="chip"><span class="sw" style="background:#2b2b2b"></span><b id="o3">0</b></div>
+      <div class="chip"><span class="sw" style="background:#c4d0de"></span><b id="o4">0</b></div>
+      <div class="chip"><span class="sw" style="background:#fcee4b"></span><b id="o5">0</b></div>
+      <div class="chip"><span class="sw" style="background:#5decf5"></span><b id="o6">0</b></div>
+    </div>
+    <div class="menu" id="menu">
+      <div class="logo">
+        <img id="menuIcon" alt="">
+        <h1><span>Pick</span><span>Craft</span></h1>
+        <p>Recorde: <b id="mBestSmall">0 m</b></p>
+      </div>
+      <div class="menu-stack" data-screen="main">
+        <button class="mbtn" type="button" data-go="play">Jogar</button>
+        <button class="mbtn" type="button" data-go="options">Opções</button>
+        <button class="mbtn" type="button" data-go="records">Recordes</button>
+        <button class="mbtn" type="button" data-go="help">Como jogar</button>
+      </div>
+      <div class="menu-stack" data-screen="play" hidden>
+        <p class="mtitle" id="playTitle">Jogar</p>
+        <div class="mcard"><span>Recorde</span><b id="pBest">0 m</b></div>
+        <div class="mcard" id="pLastBox" hidden><span>Última rodada</span><b id="pLast">0 m</b></div>
+        <div class="mcard"><span>Picareta</span><b id="pPick">Madeira</b></div>
+        <button class="mbtn go" id="play" type="button">Começar</button>
+        <button class="mbtn" type="button" data-go="main">Menu inicial</button>
+      </div>
+      <div class="menu-stack" data-screen="options" hidden>
+        <p class="mtitle">Opções</p>
+        <button class="mbtn" type="button" id="optMusic">Música: ligada</button>
+        <button class="mbtn" type="button" id="optSfx">Efeitos: ligados</button>
+        <button class="mbtn" type="button" id="optVibe">Vibração: ligada</button>
+        <button class="mbtn" type="button" data-go="main">Voltar</button>
+      </div>
+      <div class="menu-stack shop" data-screen="shop" hidden>
+        <p class="mtitle">Loja</p>
+        <div class="mcard"><span>Moedas</span><b class="coins" id="shopCoins">0</b></div>
+        <p class="shop-msg" id="shopMsg"></p>
+        <p class="shop-sec">Vender itens</p>
+        <div id="sellList" style="display:flex;flex-direction:column;gap:6px"></div>
+        <button class="mbtn" type="button" id="sellAll">Vender tudo</button>
+        <p class="shop-sec">Picaretas</p>
+        <div id="pickList" style="display:flex;flex-direction:column;gap:6px"></div>
+        <button class="mbtn" type="button" id="shopBack">Voltar ao jogo</button>
+      </div>
+      <div class="menu-stack" data-screen="records" hidden>
+        <p class="mtitle">Recordes</p>
+        <div class="mcard"><span>Maior profundidade</span><b id="mBest">0 m</b></div>
+        <div class="mcard" id="mLastBox" hidden><span>Última rodada</span><b id="mLast">0 m</b></div>
+        <button class="mbtn" type="button" data-go="main">Voltar</button>
+      </div>
+      <div class="menu-stack" data-screen="help" hidden>
+        <p class="mtitle">Como jogar</p>
+        <ol class="mhelp">
+          <li>Aperte Jogar para soltar a picareta.</li>
+          <li>Toque numa coluna para mirar a queda.</li>
+          <li>Toque na tela para jogar a picareta para cima.</li>
+          <li>Quebre blocos em sequência para fazer combo.</li>
+          <li>Quando a vida da picareta acaba, a rodada recomeça.</li>
+          <li>Na Loja, venda os blocos e compre picaretas melhores.</li>
+        </ol>
+        <button class="mbtn" type="button" data-go="main">Voltar</button>
+      </div>
+    </div>
+  </div>
+  <div class="bar">
+    <button id="drop" type="button"><img id="dropIcon" alt="">Soltar picareta</button>
+    <button id="shopBtn" class="small" type="button">Loja</button>
+    <button id="menuBtn" class="small" type="button">Menu</button>
+    <button id="music" class="small" type="button" aria-pressed="true" hidden>Música<br>ligada</button>
+    <button id="mute" class="small" type="button" aria-pressed="false" hidden>Efeitos<br>ligados</button>
+    <p class="hint">Toque numa coluna para mirar. Depois, toque na tela para jogar a picareta para cima.</p>
+  </div>
+</div>
+
+<script>
+(() => {
+const COLS = 6;
+const G = 38;            // gravidade (blocos/s²)
+const BOUNCE = 6;        // impulso do quique após cada golpe
+const BREAK_TIME = 0.14; // tempo do "flash" antes de estilhaçar
+const DURABILITY = 50;   // blocos por picareta (madeira)
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// ---------- RNG ----------
+const rng = s => () => { s |= 0; s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+const hash = (r, c) => ((r * 73856093) ^ (c * 19349663)) >>> 0;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+// ---------- Texturas 16x16 ----------
+function toCanvas(px){
+  const c = document.createElement('canvas'); c.width = c.height = 16;
+  const x = c.getContext('2d'); const id = x.createImageData(16,16);
+  px.forEach((p,i) => { const k=i*4; id.data[k]=p[0]; id.data[k+1]=p[1]; id.data[k+2]=p[2]; id.data[k+3]=p[3] ?? 255; });
+  x.putImageData(id,0,0); return c;
+}
+const shade = (col, f) => col.map(v => clamp(Math.round(v*f),0,255));
+function stonePx(R){
+  const a = [];
+  for (let i=0;i<256;i++){
+    let v = 122 + (R()-.5)*18; const n = R();
+    if (n < .14) v -= 26; else if (n > .88) v += 16;
+    a.push([v, v, v+3]);
+  }
+  return a;
+}
+function dirtPx(R){
+  const a = [];
+  for (let i=0;i<256;i++){
+    const n = R(); let f = .88 + R()*.22;
+    if (n < .12) f = .72; else if (n > .9) f = 1.18;
+    a.push(shade([134,96,67], f));
+  }
+  return a;
+}
+function grassPx(R){
+  const a = dirtPx(R);
+  for (let x=0;x<16;x++){
+    const depth = 3 + (R()<.55?1:0) + (R()<.2?1:0);
+    for (let y=0;y<depth;y++) a[y*16+x] = shade([106,170,64], .82 + R()*.3);
+  }
+  return a;
+}
+function orePx(R, col){
+  const a = stonePx(R);
+  for (let k=0;k<4;k++){
+    const cx = 2 + (R()*11|0), cy = 2 + (R()*11|0), n = 3 + (R()*3|0);
+    for (let j=0;j<n;j++){
+      const x = clamp(cx + (R()*3|0) - 1, 0, 15), y = clamp(cy + (R()*3|0) - 1, 0, 15);
+      a[y*16+x] = shade(col, j===0 ? 1.15 : .8 + R()*.25);
+    }
+  }
+  return a;
+}
+// Ferro polido: pepitas prateadas-azuladas com luz em cima/esquerda, sombra embaixo e borda chanfrada
+const IRON_BLOBS = [[[4,3],[5,3],[3,4],[4,4],[5,4],[4,5]],[[10,4],[11,4],[10,5],[11,5],[12,5]],[[6,9],[7,9],[5,10],[6,10],[7,10],[6,11]],[[11,10],[12,10],[11,11],[12,11],[11,12],[10,11]],[[3,13],[4,13],[4,12]]];
+const IRON_COL = [[255,255,255],[214,224,236],[166,180,198],[104,114,132]];
+const IRON_GEMS = [];
+function ironPx(R, v){
+  const a = stonePx(R), gem = new Set();
+  IRON_BLOBS.forEach(b => b.forEach(([x,y]) => { const xx = v === 1 ? 15 - x : x, yy = v === 2 ? 15 - y : y; gem.add(yy*16 + xx); }));
+  for (const i of gem) if (!gem.has(i+16) && i+16 < 256) a[i+16] = shade(a[i+16], .6);
+  const gems = [];
+  for (const i of gem){
+    const top = !gem.has(i-16), left = !gem.has(i-1), bot = !gem.has(i+16), right = !gem.has(i+1);
+    a[i] = top && left ? IRON_COL[0] : (top || left) ? IRON_COL[1] : (bot && right) ? IRON_COL[3] : IRON_COL[2];
+    gems.push([i % 16, i/16 | 0]);
+  }
+  IRON_GEMS[v] = gems;
+  return a;
+}
+const backPx = R => stonePx(R).map(p => [p[0]*.36, p[1]*.36, p[2]*.42]);
+
+// tipos: 0 grama, 1 terra, 2 pedra, 3 carvão, 4 ferro, 5 ouro, 6 diamante
+const ORE_COL = {3:[44,44,44], 4:[214,224,236], 5:[252,238,75], 6:[93,236,245]};
+const HARD = [3.4, 3.4, 2.6, 2.2, 2.0, 2.0, 1.7];
+const TEX = [], PAL = [];
+for (let t=0;t<7;t++){
+  TEX[t] = []; PAL[t] = [];
+  for (let v=0;v<3;v++){
+    const R = rng(t*1000 + v*17 + 5);
+    const px = t===0 ? grassPx(R) : t===1 ? dirtPx(R) : t===2 ? stonePx(R) : t===4 ? ironPx(R, v) : orePx(R, ORE_COL[t]);
+    TEX[t].push(toCanvas(px));
+    if (v===0) for (let i=0;i<24;i++){ const p = px[(R()*256)|0]; PAL[t].push(`rgb(${p[0]|0},${p[1]|0},${p[2]|0})`); }
+  }
+  if (ORE_COL[t]) for (let i=0;i<10;i++){ const p = ORE_COL[t]; PAL[t].push(`rgb(${p[0]},${p[1]},${p[2]})`); }
+}
+const BACK = [0,1,2].map(v => toCanvas(backPx(rng(900+v))));
+
+// ---------- Padrões de rachadura (crescem do centro para fora) ----------
+function crackPattern(seed){
+  const R = rng(seed), branches = [], seen = new Set();
+  const nb = 4 + (R()*2|0);
+  for (let b=0;b<nb;b++){
+    let x = 7 + (R()*3|0) - 1, y = 7 + (R()*3|0) - 1;
+    const ang = (b/nb)*Math.PI*2 + R()*.8;
+    let dx = Math.cos(ang), dy = Math.sin(ang);
+    const path = [];
+    const len = 6 + (R()*5|0);
+    for (let s=0;s<len;s++){
+      const k = (x|0) + ',' + (y|0);
+      if (x>=0 && x<16 && y>=0 && y<16 && !seen.has(k)){ seen.add(k); path.push({x:x|0, y:y|0}); }
+      dx += (R()-.5)*.9; dy += (R()-.5)*.9; const m = Math.hypot(dx,dy) || 1; dx/=m; dy/=m;
+      x += dx*1.2; y += dy*1.2;
+    }
+    branches.push(path);
+  }
+  const out = []; let i = 0, added = true;
+  while (added){ added = false; for (const p of branches) if (p[i]){ out.push(p[i]); added = true; } i++; }
+  return out;
+}
+const CRACKS = [0,1,2,3].map(i => crackPattern(4242 + i*31));
+
+// ---------- Picareta (sprite original, desenhada por código) ----------
+function makePick(H){
+  H = H || {tip:[196,154,92], l1:[170,128,70], l2:[156,116,62], o:[124,90,46]};
+  const a = new Array(256).fill(null);
+  for (let y=0;y<16;y++) for (let x=0;x<16;x++){
+    const d = Math.abs(x + y - 16) / Math.SQRT2;
+    if (d <= .75 && x >= 2 && x <= 10) a[y*16+x] = (x % 2) ? [112,80,38] : [84,58,26];
+    const dx = x - 3, dy = 13 - y, r = Math.hypot(dx,dy), th = Math.atan2(dy,dx)*180/Math.PI;
+    if (th >= 6 && th <= 84){
+      const t = Math.abs(th - 45)/39, half = 1.25*(1 - t*.6);
+      if (Math.abs(r - 11.3) <= half) a[y*16+x] = t > .82 ? H.tip : (r < 11.3 ? ((x+y)%3 ? H.l1 : H.l2) : H.o);
+    }
+  }
+  const out = a.slice();
+  for (let y=0;y<16;y++) for (let x=0;x<16;x++){
+    if (a[y*16+x]) continue;
+    for (const [ox,oy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const nx=x+ox, ny=y+oy;
+      if (nx>=0&&nx<16&&ny>=0&&ny<16&&a[ny*16+nx]){ out[y*16+x] = [30,25,21]; break; }
+    }
+  }
+  return toCanvas(out.map(p => p ? p : [0,0,0,0]));
+}
+const PICK = makePick(); // madeira: base da física (centro de massa e pontos de contato)
+// ---------- Picaretas da loja ----------
+const TIERS = [
+  {id:'madeira',  nome:'Madeira',  vida:50,  forca:1,   preco:0},
+  {id:'pedra',    nome:'Pedra',    vida:80,  forca:1.3, preco:60,   head:{tip:[196,196,200], l1:[150,150,156], l2:[136,136,142], o:[100,100,108]}},
+  {id:'ferro',    nome:'Ferro',    vida:120, forca:1.7, preco:300,  head:{tip:[255,255,255], l1:[218,226,236], l2:[198,208,220], o:[148,158,174]}},
+  {id:'ouro',     nome:'Ouro',     vida:100, forca:2.4, preco:900,  head:{tip:[255,250,190], l1:[252,220,72],  l2:[238,198,52],  o:[188,138,22]}},
+  {id:'diamante', nome:'Diamante', vida:200, forca:3.2, preco:2500, head:{tip:[226,255,255], l1:[98,236,240],  l2:[72,212,222],  o:[28,150,162]}}
+];
+TIERS.forEach(t => { t.sprite = t.head ? makePick(t.head) : PICK; t.icon = (() => { const c = document.createElement('canvas'); c.width = c.height = 32; const x = c.getContext('2d'); x.imageSmoothingEnabled = false; x.drawImage(t.sprite,0,0,32,32); return c.toDataURL(); })(); });
+const tierById = id => TIERS.find(t => t.id === id) || TIERS[0];
+// ponta da picareta (pixels) → ângulo de golpe e distância até o centro
+const TIPV = {x: 14.7 - 8, y: 12.3 - 8};
+const STRIKE = Math.PI/2 - Math.atan2(TIPV.y, TIPV.x);
+const PICK_SCALE = 2.3; // tamanho em blocos (picareta grande)
+const TIP = Math.hypot(TIPV.x, TIPV.y) / 16 * PICK_SCALE;
+
+(() => { const c = document.createElement('canvas'); c.width = c.height = 32; const x = c.getContext('2d'); x.imageSmoothingEnabled = false; x.drawImage(PICK,0,0,32,32); document.getElementById('dropIcon').src = document.getElementById('menuIcon').src = c.toDataURL(); })();
+
+// ---------- Mundo ----------
+const rows = [];
+function makeCell(r, c){
+  let t;
+  if (r === 0) t = 0;
+  else if (r < 3 || (r === 3 && Math.random() < .5)) t = 1;
+  else {
+    const n = Math.random();
+    if (r >= 25 && n < .015) t = 6;
+    else if (r >= 16 && n < .045) t = 5;
+    else if (r >= 8 && n < .095) t = 4;
+    else if (n < .17) t = 3;
+    else t = 2;
+  }
+  return {t, dmg:0, vis:0, shake:0, brk:-1, pat: CRACKS[hash(r,c) % CRACKS.length]};
+}
+function row(r){ while (rows.length <= r){ const rr = rows.length; rows.push(Array.from({length:COLS}, (_,c) => makeCell(rr,c))); } return rows[r]; }
+const colTop = new Array(COLS).fill(0);
+const active = new Set();
+const picks = [], parts = [];
+const stats = {blocks:0, 3:0, 4:0, 5:0, 6:0};
+let maxDepth = 0;
+const pops = []; // textos de combo que sobem na tela
+// combo: quebras seguidas em menos de 1,2 s aumentam o combo, o dano, o tom do som e a vibração
+let combo = 0, comboTimer = 0, freeze = 0;
+const store = (k, v) => { try { if (v === undefined) return +localStorage.getItem(k) || 0; localStorage.setItem(k, v); } catch(e){ return 0; } };
+let bestDepth = store('cp_bestDepth');
+// baú: guarda tudo que a picareta já quebrou, somando todas as rodadas (fica salvo no aparelho)
+// inventário (o que a picareta quebrou e ainda não foi vendido), moedas e picaretas compradas — tudo salvo no aparelho
+const chest = (() => { try { const v = JSON.parse(localStorage.getItem('cp_chest') || '[]'); return [0,1,2,3,4,5,6].map(i => +v[i] || 0); } catch(e){ return [0,0,0,0,0,0,0]; } })();
+let coins = store('cp_coins');
+let owned = (() => { try { const v = JSON.parse(localStorage.getItem('cp_owned') || '["madeira"]'); return Array.isArray(v) ? v : ['madeira']; } catch(e){ return ['madeira']; } })();
+let equipped = (() => { try { return localStorage.getItem('cp_equip') || 'madeira'; } catch(e){ return 'madeira'; } })();
+if (!owned.includes(equipped)) equipped = 'madeira';
+let chestDirty = false;
+const saveChest = () => { if (!chestDirty) return; chestDirty = false; try { localStorage.setItem('cp_chest', JSON.stringify(chest)); localStorage.setItem('cp_coins', coins); localStorage.setItem('cp_owned', JSON.stringify(owned)); localStorage.setItem('cp_equip', equipped); } catch(e){} };
+setInterval(saveChest, 1500);
+addEventListener('pagehide', saveChest);
+let cam = 0, worldShake = 0, time = 0;
+
+const clouds = Array.from({length:5}, (_,i) => ({x: Math.random(), y: .12 + i*.15 + Math.random()*.05, w: 1.4 + Math.random()*1.6, s: .008 + Math.random()*.01}));
+
+// ---------- Áudio ----------
+let AC = null, muted = false;
+function audio(){
+  if (!AC){ try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){} }
+  if (AC && AC.state === 'suspended') AC.resume();
+  initMusic();
+}
+
+// ---------- Efeitos sonoros relaxantes (sintetizados, por material) ----------
+// Toques abafados e arredondados, com um pouco de eco suave. Pedra = "toc" seco e grave; terra = esfarelar macio;
+// minério quebrado = um sininho calmo de recompensa.
+let sfxIn = null, noiseBuf = null, lastHitSnd = 0;
+function initSfx(){
+  if (sfxIn || !AC) return;
+  const out = AC.createGain(); out.gain.value = .9;
+  sfxIn = AC.createBiquadFilter(); sfxIn.type = 'lowpass'; sfxIn.frequency.value = 3000;
+  const dry = AC.createGain(); dry.gain.value = .85;
+  const wet = AC.createGain(); wet.gain.value = .25;
+  const rev = AC.createConvolver();
+  const n = AC.sampleRate*1.3 | 0, ib = AC.createBuffer(2, n, AC.sampleRate);
+  for (let ch=0; ch<2; ch++){ const d = ib.getChannelData(ch); for (let i=0;i<n;i++) d[i] = (Math.random()*2-1)*Math.pow(1 - i/n, 4); }
+  rev.buffer = ib;
+  sfxIn.connect(dry); dry.connect(out); sfxIn.connect(rev); rev.connect(wet); wet.connect(out);
+  out.connect(AC.destination);
+  noiseBuf = AC.createBuffer(1, AC.sampleRate, AC.sampleRate);
+  const d = noiseBuf.getChannelData(0); for (let i=0;i<d.length;i++) d[i] = Math.random()*2-1;
+}
+const sfxOk = () => AC && sfxIn && !muted;
+function grain(t, dur, freq, q, vol, type){
+  const s = AC.createBufferSource(); s.buffer = noiseBuf;
+  const f = AC.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+  const g = AC.createGain();
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + .004); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  s.connect(f); f.connect(g); g.connect(sfxIn); s.start(t, Math.random()*.8); s.stop(t + dur + .02);
+}
+function tone(t, freq, dur, vol, type){
+  const o = AC.createOscillator(); o.type = type || 'sine';
+  o.frequency.setValueAtTime(freq, t); o.frequency.exponentialRampToValueAtTime(freq*.82, t + dur);
+  const g = AC.createGain();
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + .005); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  o.connect(g); g.connect(sfxIn); o.start(t); o.stop(t + dur + .02);
+}
+const midiHz = m => 440*Math.pow(2, (m-69)/12);
+function sHit(mat, strength){
+  if (!sfxOk()) return;
+  const t = AC.currentTime; if (t - lastHitSnd < .045) return; lastHitSnd = t;
+  const v = clamp(strength, .2, 1), r = Math.random;
+  if (mat <= 1){
+    for (let i=0;i<3;i++) grain(t + i*.016 + r()*.01, .08, 360 + r()*220, .7, .2*v, 'lowpass');
+    tone(t, 130 + r()*20, .1, .12*v);
+  } else {
+    grain(t, .05, 1000 + r()*350, 1.2, .14*v, 'bandpass');
+    tone(t, 200 + r()*35, .13, .16*v);
+    tone(t, 480 + r()*60, .05, .04*v);
+  }
+  tone(t + .003, 320 + r()*30, .07, .05*v, 'triangle'); // a própria picareta de madeira
+}
+function sBreak(mat){
+  if (!sfxOk()) return;
+  const t = AC.currentTime, r = Math.random;
+  if (mat <= 1){
+    for (let i=0;i<7;i++) grain(t + i*.026 + r()*.02, .11, 260 + r()*280, .6, .17, 'lowpass');
+    tone(t, 105, .2, .13);
+  } else {
+    for (let i=0;i<6;i++) grain(t + i*.03 + r()*.02, .08, 650 + r()*650, 1, .12, 'bandpass');
+    tone(t, 150, .24, .16); tone(t + .035, 115, .28, .09);
+  }
+  const bell = {3:[72,79], 4:[74,81], 5:[76,83], 6:[79,86]}[mat];
+  if (bell){ tone(t + .09, midiHz(bell[0]), 1.3, .06); tone(t + .22, midiHz(bell[1]), 1.5, .045); }
+}
+function sGrind(mat){
+  if (!sfxOk()) return;
+  grain(AC.currentTime, .1, mat <= 1 ? 380 : 850, .8, .05, mat <= 1 ? 'lowpass' : 'bandpass');
+}
+function sKnock(){ if (sfxOk()) tone(AC.currentTime, 250 + Math.random()*20, .09, .07, 'triangle'); }
+function sToss(){
+  if (!sfxOk()) return;
+  const t = AC.currentTime, s = AC.createBufferSource(); s.buffer = noiseBuf;
+  const f = AC.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 1.5;
+  f.frequency.setValueAtTime(350, t); f.frequency.exponentialRampToValueAtTime(1100, t + .22);
+  const g = AC.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(.07, t + .06); g.gain.exponentialRampToValueAtTime(.0001, t + .28);
+  s.connect(f); f.connect(g); g.connect(sfxIn); s.start(t, Math.random()*.6); s.stop(t + .3);
+}
+function noise(dur, freq, q, vol, type){
+  if (!AC || muted) return;
+  const n = AC.sampleRate*dur | 0, b = AC.createBuffer(1, n, AC.sampleRate), d = b.getChannelData(0);
+  for (let i=0;i<n;i++) d[i] = (Math.random()*2-1) * Math.pow(1 - i/n, 2);
+  const s = AC.createBufferSource(); s.buffer = b;
+  const f = AC.createBiquadFilter(); f.type = type || 'bandpass'; f.frequency.value = freq; f.Q.value = q;
+  const g = AC.createGain(); g.gain.value = vol;
+  s.connect(f); f.connect(g); g.connect(AC.destination); s.start();
+}
+// ---------- Música ambiente (composição original, gerada ao vivo) ----------
+// Piano suave, notas esparsas, reverb longo e pausas de silêncio entre frases.
+let musicOn = true, musicIn = null, musicOut = null, nextBar = 0, barsLeft = 0, barIdx = 0, lastNote = 66, prog = null;
+const BEAT = 60/68, BAR = BEAT*4;
+const PROGS = [
+  [[38,[62,64,66,69,73]], [47,[62,64,66,69,71]], [43,[62,66,67,71,73]], [45,[64,66,69,71,74]]],
+  [[43,[62,66,67,71,74]], [38,[62,64,66,69,73]], [40,[64,67,71,74,76]], [45,[61,64,66,69,73]]],
+  [[47,[62,66,69,71,74]], [43,[62,66,67,71,73]], [38,[64,66,69,73,76]], [42,[61,66,69,73,76]]]
+];
+function initMusic(){
+  if (musicIn || !AC) return;
+  musicOut = AC.createGain(); musicOut.gain.value = musicOn ? .2 : 0;
+  musicIn = AC.createBiquadFilter(); musicIn.type = 'lowpass'; musicIn.frequency.value = 2400;
+  const dry = AC.createGain(); dry.gain.value = .65;
+  const wet = AC.createGain(); wet.gain.value = .55;
+  const rev = AC.createConvolver();
+  const n = AC.sampleRate*3.8 | 0, ib = AC.createBuffer(2, n, AC.sampleRate);
+  for (let ch=0; ch<2; ch++){ const d = ib.getChannelData(ch); for (let i=0;i<n;i++) d[i] = (Math.random()*2-1) * Math.pow(1 - i/n, 3); }
+  rev.buffer = ib;
+  musicIn.connect(dry); dry.connect(musicOut);
+  musicIn.connect(rev); rev.connect(wet); wet.connect(musicOut);
+  musicOut.connect(AC.destination);
+  setInterval(musicTick, 150);
+}
+function pianoNote(midi, t, vel, len){
+  const f = 440 * Math.pow(2, (midi - 69)/12);
+  for (const [mult, amp] of [[1,1],[2,.32],[3,.1],[4,.04]]){
+    const o = AC.createOscillator(); o.type = 'sine'; o.frequency.value = f*mult; o.detune.value = (Math.random()-.5)*4;
+    const g = AC.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vel*amp, t + .006);
+    g.gain.exponentialRampToValueAtTime(.0001, t + len/mult**.4);
+    o.connect(g); g.connect(musicIn); o.start(t); o.stop(t + len + .1);
+  }
+}
+function playBar(t){
+  const [bass, tones] = prog[barIdx++ % prog.length];
+  pianoNote(bass, t, .32, 5); pianoNote(bass + 7, t + .02, .14, 4.5);
+  if (Math.random() < .5) pianoNote(tones[0], t + BEAT*2, .12, 4);
+  for (let s=0; s<8; s++){
+    if (Math.random() > .3) continue;
+    let cand = tones.slice().sort((a,b) => Math.abs(a-lastNote) - Math.abs(b-lastNote));
+    let m = cand[Math.random() < .7 ? (Math.random()*2|0) : (Math.random()*cand.length|0)];
+    if (Math.random() < .15) m += 12;
+    lastNote = m;
+    pianoNote(m, t + s*BEAT/2 + (Math.random()-.5)*.03, .16 + Math.random()*.1, 3.5);
+  }
+}
+function musicTick(){
+  if (!AC || !musicOn || document.hidden){ nextBar = 0; return; }
+  const now = AC.currentTime;
+  if (nextBar < now) nextBar = now + .3;
+  while (nextBar < now + .6){
+    if (barsLeft <= 0){
+      if (prog){ nextBar += 5 + Math.random()*8; }
+      prog = PROGS[Math.random()*PROGS.length | 0]; barIdx = 0;
+      barsLeft = 8 + (Math.random() < .5 ? 4 : 0);
+      continue;
+    }
+    playBar(nextBar); barsLeft--; nextBar += BAR;
+  }
+}
+function setMusic(on){
+  musicOn = on;
+  if (musicOut){ const t = AC.currentTime; musicOut.gain.cancelScheduledValues(t); musicOut.gain.setTargetAtTime(on ? .2 : 0, t, .3); }
+}
+
+let vibeOn = true;
+const buzz = ms => { if (!vibeOn) return; try { navigator.vibrate && navigator.vibrate(ms); } catch(e){} };
+
+// ---------- Ações ----------
+function drop(col){
+  if (picks.length >= 1) return; // só uma picareta por vez
+  // nasce perto de um lado e é lançada para o outro
+  const left = col != null ? col < COLS/2 : Math.random() < .5;
+  const x = col != null ? col + .5 : (left ? .9 + Math.random()*1.2 : COLS - .9 - Math.random()*1.2);
+  const vx0 = (left ? 1 : -1)*(6 + Math.random()*3);
+  picks.push({x, y: cam - skyH/bs - 1.4, vx: vx0, vy: 2,
+    ang: Math.random()*Math.PI*2, w: vx0*.7, // arremessada: gira no sentido em que vai
+    dur: tierById(equipped).vida, maxDur: tierById(equipped).vida, power: tierById(equipped).forca, sprite: tierById(equipped).sprite, done: false, alpha: 1, alphaDelay: .6, touch: new Set(), still: 0, life: 0, cool: {}});
+}
+
+// ---------- Física de corpo rígido da picareta ----------
+// Centro de massa e inércia calculados a partir dos pixels do sprite (a cabeça de madeira pesa mais que o cabo),
+// para ela girar em volta do ponto certo, como um objeto de verdade.
+const [COMX, COMY, PICK_I] = (() => {
+  const d = PICK.getContext('2d').getImageData(0, 0, 16, 16).data;
+  const ms = [];
+  for (let y=0;y<16;y++) for (let x=0;x<16;x++){
+    const k = (y*16+x)*4; if (!d[k+3]) continue;
+    const r = d[k], w = r >= 120 ? 2.2 : r >= 80 ? 1 : .4; // cabeça, cabo, contorno
+    ms.push([x + .5, y + .5, w]);
+  }
+  const W = ms.reduce((a,m) => a + m[2], 0);
+  const cx = ms.reduce((a,m) => a + m[0]*m[2], 0)/W, cy = ms.reduce((a,m) => a + m[1]*m[2], 0)/W;
+  const u = PICK_SCALE/16;
+  const I = ms.reduce((a,m) => a + m[2]*((m[0]-cx)**2 + (m[1]-cy)**2), 0)/W * u*u;
+  return [cx, cy, I];
+})();
+const PTS = [
+  // arco externo da cabeça, de ponta a ponta (pontas afiadas)
+  ...[6,15,25,35,45,55,65,75,84].map((th, i, a) => { const r = 12.2, t = th*Math.PI/180; return [3.5 + r*Math.cos(t), 13.5 - r*Math.sin(t), (i === 0 || i === a.length-1) ? 1 : 0]; }),
+  // cabo
+  [2.5,14.5,0],[4.6,12.4,0],[6.7,10.3,0]
+].map(([x,y,s]) => ({x: (x-COMX)/16*PICK_SCALE, y: (y-COMY)/16*PICK_SCALE, sharp: !!s}));
+const MASS = 1, INERTIA = PICK_I, FRIC = .3, SUB = 8;
+const MIN_BOUNCE = 9; // velocidade mínima de separação no ponto de contato (quique de bola mesmo de pertinho)
+const GRIND = 4; // dano por segundo em cada bloco encostado
+const restFor = speed => speed < .6 ? 0 : speed < 4 ? .95 : .9;
+
+function solid(cx, cy){
+  if (cx < 0 || cx >= COLS) return true;
+  if (cy < 0) return false;
+  return !!row(cy)[cx];
+}
+
+function stepPick(p, h){
+  p.vy += G*h; p.w *= (1 - .04*h);
+  p.x += p.vx*h; p.y += p.vy*h; p.ang += p.w*h;
+  const co = Math.cos(p.ang), si = Math.sin(p.ang);
+  let best = null;
+  for (const q of PTS){
+    const rx = q.x*co - q.y*si, ry = q.x*si + q.y*co;
+    const px = p.x + rx, py = p.y + ry, cx = Math.floor(px), cy = Math.floor(py);
+    let n = null, pen = 0, isCell = false;
+    if (px < 0){ n = [1,0]; pen = -px; }
+    else if (px > COLS){ n = [-1,0]; pen = px - COLS; }
+    else if (solid(cx, cy)){
+      isCell = true;
+      const opts = [];
+      if (!solid(cx, cy-1)) opts.push([py - cy, 0, -1]);
+      if (!solid(cx-1, cy)) opts.push([px - cx, -1, 0]);
+      if (!solid(cx+1, cy)) opts.push([cx + 1 - px, 1, 0]);
+      if (!solid(cx, cy+1)) opts.push([cy + 1 - py, 0, 1]);
+      if (!opts.length) opts.push([py - cy, 0, -1]);
+      opts.sort((a,b) => a[0] - b[0]);
+      pen = opts[0][0]; n = [opts[0][1], opts[0][2]];
+    }
+    if (!n) continue;
+    p.x += n[0]*pen; p.y += n[1]*pen;
+    if (isCell) for (const [nx, ny] of cellsNear(px, py, .25)) p.touch.add(ny*COLS + nx);
+    const vn = (p.vx - p.w*ry)*n[0] + (p.vy + p.w*rx)*n[1];
+    if (vn < 0 && (!best || vn < best.vn)) best = {rx, ry, n, vn, isCell, cx, cy, px, py, sharp: q.sharp};
+  }
+  if (!best) return;
+
+  // um único impulso por passo, no ponto que bate com mais força:
+  // a mesma batida decide quanto ela sobe e quanto ela gira (sem giro inventado)
+  const {rx, ry, n, vn} = best, speed = -vn;
+  const rn = rx*n[1] - ry*n[0];
+  let target = restFor(speed)*speed, floorHop = false;
+  if (best.isCell && n[1] === -1 && !p.done && speed > .5 && target < MIN_BOUNCE){ target = MIN_BOUNCE; floorHop = true; }
+  const j = (target - vn) / (1/MASS + rn*rn/INERTIA);
+  p.vx += j*n[0]/MASS; p.vy += j*n[1]/MASS; p.w += rn*j/INERTIA;
+  // ao quicar no chão, ela segue para a parede de blocos que sobrou mais perto
+  if (floorHop){
+    const dir = wallDir(p);
+    if (dir) p.vx = clamp(p.vx*.4 + dir*4.5, -6, 6);
+  }
+  // atrito no ponto de contato (faz ela rolar no sentido em que escorrega)
+  const tx = -n[1], ty = n[0];
+  const vt = (p.vx - p.w*ry)*tx + (p.vy + p.w*rx)*ty;
+  const rt = rx*ty - ry*tx;
+  const jt = clamp(-vt / (1/MASS + rt*rt/INERTIA), -FRIC*j, FRIC*j);
+  p.vx += jt*tx/MASS; p.vy += jt*ty/MASS; p.w += rt*jt/INERTIA;
+  if (best.isCell && speed > 1.5) impact(p, best.cx, best.cy, speed, best.sharp, best.px, best.py);
+  else if (!best.isCell && speed > 3) noise(.04, 900, 1, .15);
+}
+
+// procura a parede exposta mais próxima na altura da picareta (blocos com ar ao lado)
+function wallDir(p){
+  const yc = Math.floor(p.y);
+  let best = null;
+  for (let y = Math.max(0, yc - 2); y <= yc; y++)
+    for (let x = 0; x < COLS; x++){
+      if (!row(y)[x]) continue;
+      const side = (x > 0 && !row(y)[x-1]) || (x < COLS-1 && !row(y)[x+1]);
+      if (!side) continue;
+      const dx = x + .5 - p.x;
+      if (Math.abs(dx) < .8 || Math.abs(dx) > 5) continue;
+      const d = Math.abs(dx) + Math.abs(y + .5 - p.y)*.5;
+      if (!best || d < best.d) best = {d, dx};
+    }
+  return best ? Math.sign(best.dx) : 0;
+}
+
+function cellsNear(px, py, r){
+  const out = [];
+  for (let y = Math.floor(py - r); y <= Math.floor(py + r); y++)
+    for (let x = Math.floor(px - r); x <= Math.floor(px + r); x++){
+      if (x < 0 || x >= COLS || y < 0 || !row(y)[x]) continue;
+      const dx = Math.max(x - px, 0, px - (x+1)), dy = Math.max(y - py, 0, py - (y+1));
+      if (dx*dx + dy*dy <= r*r) out.push([x, y]);
+    }
+  return out;
+}
+
+function damageCell(p, cx, cy, amount){
+  if (p.done || cx < 0 || cx >= COLS || cy < 0) return;
+  const cell = row(cy)[cx];
+  if (!cell || cell.brk >= 0) return;
+  cell.dmg += HARD[cell.t] * amount * (p.power || 1) * (1 + Math.min(combo, 25)*.04);
+  cell.shake = 1; active.add(cy*COLS + cx);
+  if (cell.dmg >= 10){ cell.brk = BREAK_TIME; p.dur--; if (p.dur <= 0) p.done = true; }
+}
+
+function impact(p, cx, cy, speed, sharp, px, py){
+  const cell = row(cy)[cx];
+  if (p.done || !cell || cell.brk >= 0) return;
+  const key = cy*COLS + cx;
+  if ((p.cool[key] || 0) > time) return;
+  p.cool[key] = time + .1;
+  const base = 3.4 * (sharp ? 1 : .6) * clamp(speed/8, .35, 1.4);
+  damageCell(p, cx, cy, base);
+  // área de impacto: blocos colados ao ponto da batida também levam dano
+  for (const [nx, ny] of cellsNear(px, py, .4)) if (nx !== cx || ny !== cy) damageCell(p, nx, ny, base*.6);
+  for (let i=0;i<(sharp?5:2);i++) parts.push(chip(cell.t, px, py, .06, 3));
+  noise(.07, 1800 + Math.random()*800, 1.4, clamp(speed/14, .12, .55)); buzz(sharp ? 10 : 4);
+}
+
+function chip(t, x, y, size, speed){
+  const pal = PAL[t];
+  return {x, y, vx: (Math.random()-.5)*speed, vy: -Math.random()*speed - 1, s: size*(.6 + Math.random()*.8), col: pal[Math.random()*pal.length | 0], life: .6 + Math.random()*.5};
+}
+
+function shatter(r, c){
+  const cell = row(r)[c];
+  for (let i=0;i<22;i++) parts.push(chip(cell.t, c + .15 + Math.random()*.7, r + .15 + Math.random()*.7, .09, 7));
+  row(r)[c] = null;
+  let t0 = 0; while (!row(t0)[c]) t0++; colTop[c] = t0;
+  const before = maxDepth;
+  maxDepth = Math.max(maxDepth, r + 1);
+  if (maxDepth > bestDepth){
+    if (bestDepth > 0 && before <= bestDepth) flash(el('sBest').parentElement, 'gold');
+    bestDepth = maxDepth; store('cp_bestDepth', bestDepth);
+  }
+  freeze = Math.min(.07, .035 + combo*.003); // pausa curtinha que deixa a quebra com peso
+  stats.blocks++; if (cell.t >= 3) stats[cell.t]++;
+  chest[cell.t]++; chestDirty = true;
+  combo++; comboTimer = 1.2;
+  if (combo >= 3) pops.push({x: c + .5, y: r + .2, text: 'COMBO x' + combo, col: combo >= 10 ? '#ff9a3c' : '#ffd34d', life: 1, big: combo % 5 === 0});
+  if (!reduceMotion) worldShake = Math.min(worldShake + .12, .25);
+  const pitch = 1 + Math.min(combo, 16)*.06;
+  noise(.22, 650*pitch, .7, .8, 'lowpass'); noise(.1, 1500*pitch, 1, .3); buzz(20);
+  updateHud();
+}
+
+const el = id => document.getElementById(id);
+function flash(node, cls){ node.classList.remove(cls); void node.offsetWidth; node.classList.add(cls); }
+function updateHud(){
+  el('sCoins').textContent = coins;
+  el('sBest').textContent = bestDepth + ' m';
+  const cc = el('comboChip');
+  cc.hidden = combo < 2;
+  if (combo >= 2){ const txt = 'COMBO x' + combo; if (el('sCombo').textContent !== txt){ el('sCombo').textContent = txt; flash(cc, 'bump'); } }
+  el('sBlocks').textContent = stats.blocks;
+  el('sDepth').textContent = maxDepth + ' m';
+  for (const t of [3,4,5,6]) el('o'+t).textContent = stats[t];
+}
+
+// ---------- Canvas ----------
+const dropBtn = el('drop'), lifeEl = el('sLife');
+const cv = el('c'), ctx = cv.getContext('2d'), stage = el('stage');
+let W = 1, H = 1, bs = 1, skyH = 1, dpr = 1;
+function resize(){
+  const r = stage.getBoundingClientRect();
+  dpr = Math.min(window.devicePixelRatio || 1, 3);
+  W = cv.width = Math.max(1, Math.round(r.width*dpr));
+  H = cv.height = Math.max(1, Math.round(r.height*dpr));
+  bs = W / COLS; skyH = Math.min(H*.38, bs*4);
+}
+new ResizeObserver(resize).observe(stage); resize();
+
+const sy = y => skyH + (y - cam)*bs;
+
+// recomeça o mundo do zero (o recorde de profundidade continua salvo)
+let fadeIn = 0;
+function resetWorld(){
+  const lastDepth = maxDepth, lastBlocks = stats.blocks;
+  rows.length = 0; colTop.fill(0); active.clear();
+  parts.length = 0; pops.length = 0;
+  cam = 0; maxDepth = 0; worldShake = 0;
+  stats.blocks = 0; for (const t of [3,4,5,6]) stats[t] = 0;
+  combo = 0; comboTimer = 0;
+  fadeIn = .5;
+  updateHud();
+  lastRound = lastDepth + ' m · ' + lastBlocks + ' blocos';
+}
+
+// ---------- Menu inicial ----------
+let menuOpen = true;
+// ---------- Loja ----------
+const ITEM_NAMES = ['Grama','Terra','Pedra','Carvão','Ferro','Ouro','Diamante'];
+const ITEM_PRICE = [1, 1, 1, 5, 15, 40, 120];
+const SELL_ORDER = [2, 1, 0, 3, 4, 5, 6];
+const ITEM_ICON = ITEM_NAMES.map((_, t) => TEX[t][0].toDataURL());
+function shopMsg(t){ el('shopMsg').textContent = t || ''; }
+function renderShop(){
+  el('shopCoins').textContent = coins;
+  el('sellList').innerHTML = SELL_ORDER.map(t => `<div class="srow"><img src="${ITEM_ICON[t]}" alt=""><p>${ITEM_NAMES[t]} × ${chest[t]}<small>${ITEM_PRICE[t]} moeda${ITEM_PRICE[t] > 1 ? 's' : ''} cada</small></p>
+    <button class="sbtn${chest[t] ? '' : ' off'}" type="button" data-sell="${t}">Vender</button></div>`).join('');
+  el('pickList').innerHTML = TIERS.map(t => {
+    const have = owned.includes(t.id), using = equipped === t.id;
+    const btn = using ? `<button class="sbtn using" type="button">Em uso</button>`
+      : have ? `<button class="sbtn" type="button" data-equip="${t.id}">Usar</button>`
+      : `<button class="sbtn ${coins >= t.preco ? 'buy' : 'off'}" type="button" data-buy="${t.id}">${t.preco} moedas</button>`;
+    return `<div class="srow"><img src="${t.icon}" alt=""><p>Picareta de ${t.nome.toLowerCase()}<small>Vida ${t.vida} · Força x${t.forca}</small></p>${btn}</div>`;
+  }).join('');
+}
+function sellItem(t){
+  if (!chest[t]) return 0;
+  const gain = chest[t]*ITEM_PRICE[t];
+  coins += gain; chest[t] = 0; chestDirty = true;
+  return gain;
+}
+function afterShop(){ saveChest(); renderShop(); updateHud(); }
+el('sellList').addEventListener('click', e => {
+  const b = e.target.closest('[data-sell]'); if (!b) return;
+  const g = sellItem(+b.dataset.sell);
+  shopMsg(g ? '+' + g + ' moedas' : 'Você não tem esse item.'); if (g){ audio(); noise(.08, 2400, 2, .3); }
+  afterShop();
+});
+el('sellAll').addEventListener('click', () => {
+  let g = 0; for (let t = 0; t < 7; t++) g += sellItem(t);
+  shopMsg(g ? 'Vendeu tudo: +' + g + ' moedas' : 'Nada para vender ainda. Quebre alguns blocos.'); if (g){ audio(); noise(.12, 2400, 2, .35); }
+  afterShop();
+});
+el('pickList').addEventListener('click', e => {
+  const buy = e.target.closest('[data-buy]'), eq = e.target.closest('[data-equip]');
+  if (buy){
+    const t = tierById(buy.dataset.buy);
+    if (coins < t.preco){ shopMsg('Faltam ' + (t.preco - coins) + ' moedas. Venda mais itens.'); return; }
+    coins -= t.preco; owned.push(t.id); equipped = t.id; chestDirty = true;
+    shopMsg('Picareta de ' + t.nome.toLowerCase() + ' comprada!' + (picks.length ? ' Vale a partir da próxima picareta.' : ''));
+    audio(); noise(.15, 1800, 1.5, .4); buzz(30);
+  } else if (eq){
+    equipped = eq.dataset.equip; chestDirty = true;
+    shopMsg('Usando a picareta de ' + tierById(equipped).nome.toLowerCase() + '.' + (picks.length ? ' Vale a partir da próxima picareta.' : ''));
+  } else return;
+  el('dropIcon').src = tierById(equipped).icon;
+  afterShop();
+});
+function showScreen(name){
+  if (name === 'shop'){ renderShop(); shopMsg(''); }
+  el('menu').classList.toggle('shop-open', name === 'shop');
+  document.querySelector('.logo').hidden = name === 'shop';
+  document.querySelectorAll('.menu-stack').forEach(m => { m.hidden = m.dataset.screen !== name; });
+  if (name === 'options') syncOptions();
+}
+function syncOptions(){
+  el('optMusic').textContent = 'Música: ' + (musicOn ? 'ligada' : 'desligada');
+  el('optSfx').textContent = 'Efeitos: ' + (muted ? 'desligados' : 'ligados');
+  el('optVibe').textContent = 'Vibração: ' + (vibeOn ? 'ligada' : 'desligada');
+}
+document.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => showScreen(b.dataset.go)));
+el('optMusic').addEventListener('click', () => { el('music').click(); syncOptions(); });
+el('optSfx').addEventListener('click', () => { el('mute').click(); syncOptions(); });
+el('optVibe').addEventListener('click', () => { vibeOn = !vibeOn; syncOptions(); if (vibeOn) buzz(30); });
+let lastRound = '';
+// abre o menu inicial; o jogo fica pausado por trás enquanto o menu está aberto
+function openMenu(){
+  const last = lastRound;
+  menuOpen = true;
+  el('mBest').textContent = el('mBestSmall').textContent = el('pBest').textContent = bestDepth + ' m';
+  el('mLastBox').hidden = el('pLastBox').hidden = !last;
+  if (last) el('mLast').textContent = el('pLast').textContent = last;
+  el('playTitle').textContent = 'Jogar';
+  el('pPick').textContent = tierById(equipped).nome + ' · ' + tierById(equipped).vida + ' de vida';
+  el('play').textContent = (picks.length || stats.blocks) ? 'Continuar' : 'Começar';
+  showScreen('main');
+  el('menu').hidden = false;
+  document.querySelector('.hud').classList.add('off');
+  document.querySelector('.bar').hidden = true;
+}
+function startGame(){
+  if (!menuOpen) return;
+  menuOpen = false;
+  el('menu').hidden = true;
+  document.querySelector('.hud').classList.remove('off');
+  document.querySelector('.bar').hidden = false;
+  audio();
+}
+
+function update(dt){
+  time += dt;
+  // câmera acompanha a picareta, mantendo-a numa faixa do meio da tela
+  const fp = picks[0];
+  if (fp){
+    const sY = skyH + (fp.y - cam)*bs;
+    let target = cam;
+    if (sY > H*.55) target = fp.y - (H*.55 - skyH)/bs;
+    else if (sY < H*.25 && fp.life > .8) target = fp.y - (H*.25 - skyH)/bs;
+    target = Math.max(0, target);
+    cam += (target - cam) * Math.min(1, dt*5);
+  }
+  worldShake = Math.max(0, worldShake - dt*1.2);
+
+  for (const key of [...active]){
+    const r = key / COLS | 0, c = key % COLS, cell = rows[r] && rows[r][c];
+    if (!cell){ active.delete(key); continue; }
+    const target = cell.brk >= 0 ? 10 : Math.min(cell.dmg, 9.6);
+    cell.vis += (target - cell.vis) * Math.min(1, dt*16);
+    cell.shake = Math.max(0, cell.shake - dt*6);
+    if (cell.brk >= 0){ cell.brk -= dt; if (cell.brk <= 0){ active.delete(key); shatter(r, c); } }
+    else if (cell.shake === 0 && Math.abs(cell.vis - target) < .01) active.delete(key);
+  }
+
+  for (let i = picks.length - 1; i >= 0; i--){
+    const p = picks[i];
+    p.life += dt;
+    row(Math.max(0, Math.ceil(p.y)) + 3);
+    p.touch = new Set();
+    for (let s = 0; s < SUB; s++) stepPick(p, dt/SUB);
+    // encostada num bloco = continua quebrando, mesmo parada
+    if (!p.done) for (const key of p.touch){
+      const ty = key / COLS | 0, tx = key % COLS;
+      damageCell(p, tx, ty, GRIND*dt);
+      if (time > (p.grindSnd || 0)){
+        p.grindSnd = time + .22;
+        const c = row(ty)[tx];
+        if (c){ parts.push(chip(c.t, tx + .2 + Math.random()*.6, ty + .1, .05, 2)); noise(.05, 1400 + Math.random()*600, 1.2, .16); }
+      }
+    }
+    // objeto sem vida: quando assenta e nada mais quebra embaixo, ela some
+    const still = Math.hypot(p.vx, p.vy) < .5 && Math.abs(p.w) < .8;
+    const breaking = [...active].some(k => { const c = rows[k / COLS | 0]?.[k % COLS]; return c && c.brk >= 0; });
+    p.still = still && !breaking && !p.touch.size ? p.still + dt : 0;
+    if (!p.done && p.still > 3) p.done = true;
+    if (p.life > 90) p.done = true;
+    if (p.done){
+      p.alphaDelay -= dt;
+      if (p.alphaDelay <= 0) p.alpha -= dt*1.6;
+      if (p.alpha <= 0){ picks.splice(i, 1); resetWorld(); } // vida acabou: o jogo recomeça
+    }
+  }
+
+  for (let i = parts.length - 1; i >= 0; i--){
+    const q = parts[i];
+    q.vy += G*.6*dt; q.x += q.vx*dt; q.y += q.vy*dt; q.life -= dt;
+    if (q.life <= 0) parts.splice(i, 1);
+  }
+  for (const cl of clouds){ cl.x += cl.s*dt; if (cl.x > 1.3) cl.x = -.4; }
+  if (comboTimer > 0){ comboTimer -= dt; if (comboTimer <= 0){ combo = 0; updateHud(); } }
+  for (let i = pops.length - 1; i >= 0; i--){ const q = pops[i]; q.y -= dt*1.1; q.life -= dt; if (q.life <= 0) pops.splice(i, 1); }
+  const busy = picks.length > 0;
+  if (dropBtn.disabled !== busy){ dropBtn.disabled = busy; dropBtn.classList.toggle('ready', !busy); }
+  const lifeTxt = busy ? Math.max(0, picks[0].dur) + ' / ' + picks[0].maxDur : '—';
+  if (lifeEl.textContent !== lifeTxt) lifeEl.textContent = lifeTxt;
+}
+
+function draw(){
+  ctx.imageSmoothingEnabled = false;
+  const sxk = worldShake ? (Math.random()-.5)*worldShake*bs*.25 : 0;
+  const syk = worldShake ? (Math.random()-.5)*worldShake*bs*.25 : 0;
+
+  // céu
+  const g = ctx.createLinearGradient(0, 0, 0, Math.max(skyH,1));
+  g.addColorStop(0, '#6fa8ff'); g.addColorStop(1, '#a9d0ff');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+  // tremor: amplia um pouquinho a cena enquanto treme, para as bordas nunca mostrarem o fundo
+  ctx.save();
+  if (worldShake){
+    const maxOff = worldShake*bs*.125 + 2, z = 1 + 2*maxOff/Math.min(W, H);
+    ctx.translate(W/2, H/2); ctx.scale(z, z); ctx.translate(-W/2 + sxk, -H/2 + syk);
+  }
+  const lift = -cam*bs*.6;
+  const p = bs/8;
+  ctx.fillStyle = '#fff6c9'; ctx.fillRect(W*.74, skyH*.18 + lift, p*5, p*5);
+  ctx.fillStyle = '#ffe37a'; ctx.fillRect(W*.74 + p, skyH*.18 + p + lift, p*3, p*3);
+  for (const cl of clouds){
+    const x = Math.round(cl.x*W), y = Math.round(cl.y*skyH + lift), w = Math.round(cl.w*bs), h = Math.round(bs*.32);
+    ctx.fillStyle = 'rgba(255,255,255,.92)'; ctx.fillRect(x, y, w, h);
+    ctx.fillRect(x + Math.round(w*.2), y - Math.round(h*.6), Math.round(w*.45), Math.round(h*.6));
+    ctx.fillStyle = 'rgba(214,230,250,.9)'; ctx.fillRect(x, y + h - Math.round(h*.3), w, Math.round(h*.3));
+  }
+
+  // blocos
+  const rStart = Math.max(0, Math.floor(cam - skyH/bs) - 1);
+  const rEnd = Math.ceil(cam + (H - skyH)/bs) + 1;
+  for (let r = rStart; r <= rEnd; r++){
+    const R = row(r), y0 = Math.round(sy(r)), y1 = Math.round(sy(r+1)), h = y1 - y0;
+    for (let c = 0; c < COLS; c++){
+      const x0 = Math.round(c*bs), x1 = Math.round((c+1)*bs), w = x1 - x0, v = hash(r,c) % 3, cell = R[c];
+      if (!cell){
+        if (r >= 1){
+          ctx.drawImage(BACK[v], x0, y0, w, h);
+          const above = r > 0 && rows[r-1] && rows[r-1][c];
+          if (above){ ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(x0, y0, w, Math.round(h*.18)); }
+        }
+        continue;
+      }
+      const ox = 0;
+      ctx.drawImage(TEX[cell.t][v], x0 + ox, y0, w, h);
+      if (cell.vis > .05){
+        const n = Math.floor(cell.pat.length * Math.min(cell.vis, 10) / 10), px = w/16, s = Math.ceil(px);
+        ctx.fillStyle = 'rgba(18,13,9,.88)';
+        for (let i=0;i<n;i++){ const q = cell.pat[i]; ctx.fillRect(Math.floor(x0 + ox + q.x*px), Math.floor(y0 + q.y*px), s, s); }
+      }
+      if (cell.brk >= 0){ ctx.fillStyle = `rgba(255,255,255,${(1 - cell.brk/BREAK_TIME)*.55})`; ctx.fillRect(x0 + ox, y0, w, h); }
+      // brilho piscando nas pepitas de ferro
+      if (cell.t === 4 && IRON_GEMS[v]){
+        const ph = (hash(r,c) % 1000)/1000*2.2, k = (time*.8 + ph) % 2.2;
+        if (k < .6){
+          const gems = IRON_GEMS[v], gm = gems[(Math.floor((time*.8 + ph)/2.2)*7 + hash(r,c)) % gems.length];
+          const a = Math.sin(k/.6*Math.PI), px = w/16, cx = x0 + (gm[0]+.5)*px, cy = y0 + (gm[1]+.5)*px, L = px*(.5 + a), t2 = Math.max(1, px*.5);
+          ctx.fillStyle = `rgba(255,255,255,${a})`;
+          ctx.fillRect(Math.round(cx - L), Math.round(cy - t2/2), Math.round(L*2), Math.round(t2));
+          ctx.fillRect(Math.round(cx - t2/2), Math.round(cy - L), Math.round(t2), Math.round(L*2));
+        }
+      }
+    }
+  }
+
+  // partículas
+  for (const q of parts){
+    ctx.globalAlpha = clamp(q.life*2, 0, 1); ctx.fillStyle = q.col;
+    const s = Math.max(2, Math.round(q.s*bs));
+    ctx.fillRect(Math.round(q.x*bs - s/2), Math.round(sy(q.y) - s/2), s, s);
+  }
+  ctx.globalAlpha = 1;
+
+  // picaretas
+  const size = PICK_SCALE*bs;
+  for (const k of picks){
+    ctx.save(); ctx.globalAlpha = clamp(k.alpha, 0, 1);
+    ctx.translate(k.x*bs, sy(k.y)); ctx.rotate(k.ang);
+    ctx.drawImage(k.sprite || PICK, -COMX/16*size, -COMY/16*size, size, size); // gira em volta do centro de massa
+    ctx.restore();
+  }
+  // combo subindo
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const q of pops){
+    const fs = Math.round(bs*(q.big ? .44 : .32));
+    ctx.font = `700 ${fs}px "Pixelify Sans", "Courier New", monospace`;
+    ctx.globalAlpha = clamp(q.life*2, 0, 1);
+    const tw = ctx.measureText(q.text).width;
+    const x = Math.round(clamp(q.x*bs, tw/2 + 6, W - tw/2 - 6)), y = Math.round(sy(q.y));
+    ctx.lineWidth = Math.max(3, fs*.22); ctx.strokeStyle = 'rgba(20,14,10,.9)'; ctx.strokeText(q.text, x, y);
+    ctx.fillStyle = q.col; ctx.fillText(q.text, x, y);
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+let last = performance.now();
+function loop(now){
+  const dt = Math.min(.05, (now - last)/1000); last = now;
+  if (menuOpen) {} else if (freeze > 0) freeze -= dt; else update(dt);
+  draw();
+  if (fadeIn > 0){ ctx.fillStyle = `rgba(0,0,0,${Math.min(1, fadeIn*2)})`; ctx.fillRect(0, 0, W, H); fadeIn -= dt; }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// ---------- Controles ----------
+el('play').addEventListener('click', startGame);
+el('drop').addEventListener('click', () => { if (menuOpen) startGame(); audio(); drop(); });
+// sair para o menu encerra a rodada: o mundo recomeça do zero
+el('menuBtn').addEventListener('click', () => {
+  if (picks.length || stats.blocks){ picks.length = 0; resetWorld(); fadeIn = 0; }
+  openMenu();
+});
+// baú aberto direto do jogo: o Voltar devolve para o jogo
+el('shopBtn').addEventListener('click', () => { openMenu(); showScreen('shop'); });
+el('shopBack').addEventListener('click', () => startGame());
+cv.addEventListener('pointerdown', e => {
+  if (menuOpen) return;
+  audio();
+  const r = cv.getBoundingClientRect();
+  const tx = (e.clientX - r.left) / (r.width/COLS);
+  const p = picks[0];
+  if (p){
+    // toque na tela = a picareta sobe como uma bola chutada para cima (a qualquer momento)
+    if (!p.done && time > (p.tapCool || 0)){
+      p.tapCool = time + .15;
+      p.vy = -13;
+      p.vx = clamp(p.vx*.4 + (tx - p.x)*1.4, -5, 5);
+      p.w += p.vx * 1.2; // empurrão de lado tomba a picareta naquele sentido
+      p.still = 0;
+      noise(.12, 500, .8, .25, 'lowpass');
+    }
+    return;
+  }
+  drop(clamp(Math.floor(tx), 0, COLS-1));
+});
+el('mute').addEventListener('click', e => {
+  muted = !muted; audio();
+  e.currentTarget.innerHTML = muted ? 'Efeitos<br>desligados' : 'Efeitos<br>ligados';
+  e.currentTarget.setAttribute('aria-pressed', String(muted));
+});
+el('music').addEventListener('click', e => {
+  audio(); setMusic(!musicOn);
+  e.currentTarget.innerHTML = musicOn ? 'Música<br>ligada' : 'Música<br>desligada';
+  e.currentTarget.setAttribute('aria-pressed', String(musicOn));
+});
+
+updateHud();
+el('dropIcon').src = tierById(equipped).icon;
+dropBtn.classList.add('ready');
+openMenu('');
+})();
+</script>
+
+</body>
+</html>
